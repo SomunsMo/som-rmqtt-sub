@@ -1,0 +1,25 @@
+{
+  mqtt: {
+    // 巴法云 MQTT Host
+    host: "bemfa.com",
+    // 巴法云 MQTT Port
+    port: 9501,
+    // 是否使用 TLS（默认 false）
+    use_tls: false,
+    // 巴法云没有账号和密码
+    username: "",
+    // 密码
+    password: "",
+    // 巴法云账号的私钥
+    client_id: "46****************************55",
+    // 巴法云的设备名
+    topic: "DesktopPC006"
+  },
+  commands: {
+    // 当收到 "on" 时执行的sh命令
+    "on": "mkdir test_received_on",
+    // 当收到 "off" 时执行的sh命令
+    "off": "mkdir test_received_off",
+    // 如果有其他的，可自行配置
+  }
+}
