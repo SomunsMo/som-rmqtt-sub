@@ -1,0 +1,4 @@
+# 指定mips架构的交叉编译镜像
+[target.mipsel-unknown-linux-musl]
+# 使用 cross-rs 官方维护的社区镜像
+image = "ghcr.io/cross-rs/mipsel-unknown-linux-musl:main"
