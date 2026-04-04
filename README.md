@@ -15,11 +15,14 @@
 ## 运行示例 - OpenWrt(mips)
 
 1. 先下载或自己构建可执行程序
-2. 在将构建完的可执行程序目录内执行命令部署
+2. 在将构建完的可执行程序目录内
+3. 执行下方命令或下载命令中的脚本手动以部署
 
 ```shell
 wget -qO- https://github.com/SomunsMo/som-rmqtt-sub/raw/master/sh/create%20service.sh | sh
 ```
+
+若自动下载配置失败，可手动下载后，放在可执行程序同级目录内。
 
 ### 编辑配置文件
 
