@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs::read_to_string;
-use std::process::Command;
+use std::path::PathBuf;
+use std::process::{Command, exit};
 use std::time::Duration;
 
-use rumqttc::{Client, Event, Incoming, MqttOptions, QoS, Transport};
+use rumqttc::{Client, ConnectionError, Event, Incoming, MqttOptions, QoS, Transport};
 use serde::Deserialize;
 
 // --------------------------
@@ -27,10 +29,49 @@ pub struct MqttConfig {
     pub topic: String,
 }
 
+/// 解析配置文件路径
+fn parse_config_path() -> PathBuf {
+    let args: Vec<String> = env::args().collect();
+
+    for i in 0..args.len() {
+        // 支持多种参数格式：-config, --config, /config
+        if (args[i] == "-config" || args[i] == "--config" || args[i] == "/config")
+            && i + 1 < args.len()
+        {
+            return PathBuf::from(&args[i + 1]);
+        }
+    }
+
+    // 默认从当前目录读取
+    let path = PathBuf::from("config.json5");
+    path
+}
+
+/// 处理连接错误
+fn handler_conn_err(e: ConnectionError) {
+    match e {
+        ConnectionError::ConnectionRefused(_) => {
+            // 认证相关错误，直接退出
+            eprintln!("Connection refused.\nExiting...");
+            exit(1);
+        }
+        _ => {}
+    }
+}
+
 fn main() {
     // 读取配置
-    let config_str = read_to_string("config.json5").expect("Could not find config.json5 file");
-    let config: Config = json5::from_str(&config_str).expect("Invalid configuration format");
+    let config_path = parse_config_path();
+    println!("Config path: {:?}", config_path);
+
+    let config_str = read_to_string(&config_path).unwrap_or_else(|_| {
+        eprintln!("Could not find config file at {:?}", config_path);
+        exit(1);
+    });
+    let config: Config = json5::from_str(&config_str).unwrap_or_else(|_| {
+        eprintln!("Invalid configuration format in {:?}.", config_path);
+        exit(1);
+    });
 
     // MQTT 连接
     let mut mqtt_opts =
@@ -57,7 +98,13 @@ fn main() {
         .subscribe(&config.mqtt.topic, QoS::AtMostOnce)
         .unwrap();
 
-    println!("Connect to MQTT...");
+    println!(
+        "Attempting to connect to {}:{}",
+        config.mqtt.host, config.mqtt.port
+    );
+
+    // 超时重试时长
+    let sleep_duration = Duration::from_secs(5);
 
     // 循环监听
     loop {
@@ -82,18 +129,34 @@ fn main() {
                                     let _ = Command::new("sh").arg("-c").arg(cmd).spawn();
                                 }
                             }
+                            Incoming::Disconnect => {
+                                eprintln!("Disconnected from MQTT broker");
+                            }
                             _ => {
                                 // println!("Received unexpected packet: {:?}", incoming);
                             }
                         }
                     }
-                    _ => {}
+                    Ok(Event::Outgoing(_outgoing)) => {
+                        // 处理 outgoing 事件（可选）
+                        // println!("Outgoing event: {:?}", _outgoing);
+                    }
+                    Err(e) => {
+                        eprintln!("Error receiving event: {:?}", e);
+                        handler_conn_err(e);
+
+                        println!("Reconnecting in {:?}", sleep_duration);
+                        std::thread::sleep(sleep_duration);
+                    }
                 }
             }
 
             Err(e) => {
-                eprintln!("Error:{:?}\n Reconnecting in 2S", e);
-                std::thread::sleep(Duration::from_secs(2));
+                eprintln!(
+                    "Connection error:{:?}\n Reconnecting in {:?}",
+                    e, sleep_duration
+                );
+                std::thread::sleep(sleep_duration);
             }
         }
     }

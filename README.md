@@ -15,14 +15,21 @@
 ## 运行示例 - OpenWrt(mips)
 
 1. 先下载或自己构建可执行程序
-2. 在将构建完的可执行程序目录内
-3. 执行下方命令或下载命令中的脚本手动以部署
+2. 终端所在位置应为“**可执行程序所在目录**”
+3. 执行下方命令以部署
 
 ```shell
-wget -qO- https://github.com/SomunsMo/som-rmqtt-sub/raw/master/sh/create%20service.sh | sh
+wget -O- https://github.com/SomunsMo/som-rmqtt-sub/raw/master/sh/create%20service.sh | sh
 ```
 
-若自动下载配置失败，可手动下载后，放在可执行程序同级目录内。
+若机器无法直接连接Github，建议用其他方式手动下载[脚本](https://github.com/SomunsMo/som-rmqtt-sub/raw/master/sh/create%20service.sh)
+和[配置文件](https://github.com/SomunsMo/som-rmqtt-sub/raw/master/config/config.json5)。  
+下载完毕后，将**脚本**、**配置文件**、**可执行程序**放置在同一目录下，然后执行下方命令
+
+```shell
+chmod +x create_service.sh
+./create_service.sh
+```
 
 ### 编辑配置文件
 
@@ -30,7 +37,7 @@ wget -qO- https://github.com/SomunsMo/som-rmqtt-sub/raw/master/sh/create%20servi
 [配置参考模板](https://github.com/SomunsMo/som-rmqtt-sub/blob/master/config/config.json5)
 
 ```shell
-vi /usr/bin/som-rmqtt-sub/config.json5
+vi /etc/som-rmqtt-sub/config.json5
 ```
 
 ### 启动程序

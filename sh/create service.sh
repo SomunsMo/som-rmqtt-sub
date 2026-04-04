@@ -13,16 +13,17 @@ APP_BIN="${BIN_DIR}/${APP_NAME}"
 CONFIG_DIR="/etc/${APP_NAME}"
 CONFIG_FILE="${CONFIG_DIR}/${LOCAL_CONFIG}"
 LOG_DIR="/var/log/${APP_NAME}"
-SERVICE_WRAPPER="${BIN_DIR}/som-create-service.sh"
+# 启动脚本放应用配置目录
+SERVICE_WRAPPER="${CONFIG_DIR}/wrapper.sh"
 INIT_SERVICE="/etc/init.d/${APP_NAME}"
 
 # ==================== 创建目录 ====================
-echo "1. 初始化系统目录..."
+echo "初始化系统目录..."
 mkdir -p "${BIN_DIR}" "${CONFIG_DIR}" "${LOG_DIR}"
 chmod 755 "${BIN_DIR}" "${CONFIG_DIR}" "${LOG_DIR}"
 
 # ==================== 检测主程序 ====================
-echo "2. 检测主程序 ${APP_NAME}..."
+echo "检测主程序 ${APP_NAME}..."
 if [ ! -f "./${APP_NAME}" ]; then
     echo "错误：未找到当前目录的主程序 ${APP_NAME}，安装终止！"
     exit 1
@@ -30,13 +31,13 @@ fi
 echo "主程序校验通过"
 
 # ==================== 部署主程序 ====================
-echo "3. 部署主程序到 ${APP_BIN}..."
+echo "部署主程序到 ${APP_BIN}..."
 mv -f "./${APP_NAME}" "${APP_BIN}"
 chmod 755 "${APP_BIN}"
 echo "主程序部署完成"
 
 # ==================== 配置文件处理 ====================
-echo "4. 处理配置文件..."
+echo "处理配置文件..."
 if [ -f "./${LOCAL_CONFIG}" ]; then
     echo "检测到本地配置文件，直接部署到 ${CONFIG_FILE}"
     mv -f "./${LOCAL_CONFIG}" "${CONFIG_FILE}"
@@ -53,16 +54,16 @@ else
 fi
 
 # ==================== 生成启动脚本 ====================
-echo "5. 生成启动脚本..."
+echo "生成启动包装脚本..."
 cat > "${SERVICE_WRAPPER}" << EOF
 #!/bin/sh
 LOG_FILE="${LOG_DIR}/${APP_NAME}-\$(date +%Y%m%d).log"
-exec "${APP_BIN}" >> "\${LOG_FILE}" 2>&1
+exec "${APP_BIN}" --config "${CONFIG_FILE}" >> "\${LOG_FILE}" 2>&1
 EOF
 chmod 755 "${SERVICE_WRAPPER}"
 
 # ==================== 生成系统服务 ====================
-echo "6. 配置系统服务..."
+echo "配置系统服务..."
 cat > "${INIT_SERVICE}" << EOF
 #!/bin/sh /etc/rc.common
 START=99
@@ -71,8 +72,10 @@ USE_PROCD=1
 
 start_service() {
     procd_open_instance
-    procd_set_param command /usr/bin/som-create-service.sh
-    procd_set_param respawn  # 崩溃自动重启
+    # 为实现一些日志方面功能，使用包装脚本启动
+    procd_set_param command ${SERVICE_WRAPPER}
+    # 崩溃自启
+    procd_set_param respawn
     procd_close_instance
 }
 
@@ -83,7 +86,7 @@ EOF
 chmod 755 "${INIT_SERVICE}"
 
 # ==================== 配置日志清理 ====================
-echo "7. 配置日志自动清理..."
+echo "配置日志自动清理..."
 (crontab -l 2>/dev/null | grep -v "${APP_NAME}"; echo "0 2 * * * find ${LOG_DIR} -name '${APP_NAME}-*.log' -mtime +7 -delete") | crontab -
 /etc/init.d/cron enable
 /etc/init.d/cron restart
@@ -94,6 +97,7 @@ echo "============================================="
 echo "部署完成！所有功能正常生效"
 echo "- 程序路径：${APP_BIN}"
 echo "- 配置文件：${CONFIG_FILE}"
+echo "- 启动脚本：${SERVICE_WRAPPER}"
 echo "- 日志路径：${LOG_DIR}（保留7天，每日自动清理）"
 echo "- 服务命令：/etc/init.d/${APP_NAME} start|stop|restart|enable"
 echo "- 核心功能：崩溃自动重启 + 开机自启"
