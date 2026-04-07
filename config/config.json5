@@ -12,14 +12,29 @@
     password: "",
     // 巴法云账号的私钥
     client_id: "46****************************55",
-    // 巴法云的设备名
-    topic: "DesktopPC006"
   },
-  commands: {
-    // 当收到 "on" 时执行的sh命令
-    "on": "mkdir test_received_on",
-    // 当收到 "off" 时执行的sh命令
-    "off": "mkdir test_received_off",
-    // 如果有其他的，可自行配置
-  }
+  // 订阅的主题列表
+  "subscriptions": [
+    {
+      // 巴法云的设备名
+      // 这个006后缀是巴法云的开关设备类型，这里对设备类型无限制，只要能让设备发出对应的命令即可。
+      // 例如：006开关，巴法云那边会把 "on" 作为“打开”命令的消息；"off" 作为“关闭”命令的消息。
+      "topic": "DesktopPC006",
+      commands: {
+        // 当收到 "on" 时执行的sh命令
+        "on": "mkdir test_received_on",
+        // 当收到 "off" 时执行的sh命令
+        "off": "mkdir test_received_off",
+        // 如果有其他的，可自行配置
+      }
+    },
+    {
+      "topic": "Laptop006",
+      "commands": {
+        "on": "echo '收到打开指令'",
+        "off": "echo '收到关闭指令'"
+      }
+    }
+    // 如有其他主题，可按上面格式从此处开始，依次添加。
+  ]
 }
