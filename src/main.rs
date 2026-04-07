@@ -60,6 +60,11 @@ fn handler_conn_err(e: ConnectionError) {
 }
 
 fn main() {
+    // 打印程序启动信息，防止log与上次运行的日志视觉粘连
+    println!();
+    println!("======================================================");
+    println!("MQTT Client Starting...");
+
     // 读取配置
     let config_path = parse_config_path();
     println!("Config path: {:?}", config_path);
