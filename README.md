@@ -8,6 +8,12 @@
 
 所以想到在OpenWrt上订阅巴法云的MQTT消息，在OpenWrt上根据消息内容执行预先配置好的shell命令。
 
+## FAQ
+
+### 能否订阅非巴法云的MQTT消息？
+
+理论上可以订阅其他MQTT主题，因为使用的是MQTT标准协议。
+
 ### 为什么不用 Python + EthanHome-WOL
 
 本人路由器剩余的存储空间不足4MB，连基础的Python环境都无法安装。
