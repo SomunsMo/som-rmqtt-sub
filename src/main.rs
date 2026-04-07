@@ -14,7 +14,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub mqtt: MqttConfig,
-    pub commands: HashMap<String, String>,
+    pub subscriptions: Vec<SubscriptionConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,7 +26,12 @@ pub struct MqttConfig {
     pub username: String,
     pub password: String,
     pub client_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubscriptionConfig {
     pub topic: String,
+    pub commands: HashMap<String, String>,
 }
 
 /// 解析配置文件路径
@@ -98,10 +103,17 @@ fn main() {
     // -------------------------------------------------------
 
     let (client, mut connection) = Client::new(mqtt_opts, 10);
-    client
-        // QOS（巴法云禁止Qos2，需要注意）
-        .subscribe(&config.mqtt.topic, QoS::AtMostOnce)
-        .unwrap();
+    
+    // 订阅所有主题
+    for subscription in &config.subscriptions {
+        client
+            .subscribe(&subscription.topic, QoS::AtMostOnce)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to subscribe to topic {}: {:?}", subscription.topic, e);
+                exit(1);
+            });
+        println!("Subscribed to topic: {}", subscription.topic);
+    }
 
     println!(
         "Attempting to connect to {}:{}",
@@ -120,18 +132,27 @@ fn main() {
                     Ok(Event::Incoming(incoming)) => {
                         match incoming {
                             Incoming::ConnAck(_ack) => {
-                                println!("Connected successfully | Topic: {}", config.mqtt.topic);
+                                println!("Connected successfully | Subscribed to {} topics", config.subscriptions.len());
+                                for subscription in &config.subscriptions {
+                                    println!("  - {}", subscription.topic);
+                                }
                                 println!("---");
                             }
                             Incoming::Publish(p) => {
                                 let payload = String::from_utf8_lossy(&p.payload);
                                 let msg = payload.trim();
-                                println!("\nReceived:{}", msg);
+                                let topic = &p.topic;
+                                println!("\nReceived on topic '{}': {}", topic, msg);
 
-                                // 执行命令
-                                if let Some(cmd) = config.commands.get(msg) {
-                                    println!("Execute:{}", cmd);
-                                    let _ = Command::new("sh").arg("-c").arg(cmd).spawn();
+                                // 查找对应的订阅配置并执行命令
+                                for subscription in &config.subscriptions {
+                                    if &subscription.topic == topic {
+                                        if let Some(cmd) = subscription.commands.get(msg) {
+                                            println!("Execute: {}", cmd);
+                                            let _ = Command::new("sh").arg("-c").arg(cmd).spawn();
+                                        }
+                                        break;
+                                    }
                                 }
                             }
                             Incoming::Disconnect => {
