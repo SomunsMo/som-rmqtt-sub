@@ -71,6 +71,7 @@ fi
 echo "-- 生成启动包装脚本..."
 cat > "${SERVICE_WRAPPER}" << EOF
 #!/bin/sh
+mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/${APP_NAME}-\$(date +%Y%m%d).log"
 exec "${APP_BIN}" --config "${CONFIG_FILE}" >> "\${LOG_FILE}" 2>&1
 EOF

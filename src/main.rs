@@ -1,87 +1,44 @@
-use std::collections::HashMap;
-use std::env;
-use std::fs::read_to_string;
-use std::path::PathBuf;
-use std::process::{Command, exit};
-use std::time::Duration;
+/// 退出程序宏
+#[macro_export]
+macro_rules! err_exit {
+    ($($arg:tt)*) => {{
+        log::error!($($arg)*);
+        log::info!("Exiting...\n");
+        std::process::exit(1);
+    }};
+}
+
+// 宏定义区域结束
+// 宏定义要早于config模块引用，否则config模块内的代码无法使用上面的宏
+// --------------------------
+
+mod config;
 
 use rumqttc::{Client, ConnectionError, Event, Incoming, MqttOptions, QoS, Transport};
-use serde::Deserialize;
-
-// --------------------------
-// JSON5 配置结构
-// --------------------------
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub mqtt: MqttConfig,
-    pub subscriptions: Vec<SubscriptionConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct MqttConfig {
-    pub host: String,
-    pub port: u16,
-    #[serde(default)]
-    pub use_tls: bool,
-    pub username: String,
-    pub password: String,
-    pub client_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SubscriptionConfig {
-    pub topic: String,
-    pub commands: HashMap<String, String>,
-}
-
-/// 解析配置文件路径
-fn parse_config_path() -> PathBuf {
-    let args: Vec<String> = env::args().collect();
-
-    for i in 0..args.len() {
-        // 支持多种参数格式：-config, --config, /config
-        if (args[i] == "-config" || args[i] == "--config" || args[i] == "/config")
-            && i + 1 < args.len()
-        {
-            return PathBuf::from(&args[i + 1]);
-        }
-    }
-
-    // 默认从当前目录读取
-    let path = PathBuf::from("config.json5");
-    path
-}
+use std::process::Command;
+use std::time::Duration;
 
 /// 处理连接错误
 fn handler_conn_err(e: ConnectionError) {
     match e {
         ConnectionError::ConnectionRefused(_) => {
             // 认证相关错误，直接退出
-            eprintln!("Connection refused.\nExiting...");
-            exit(1);
+            err_exit!("Connection refused: {:?}", e);
         }
         _ => {}
     }
 }
 
-fn main() {
+/// 初始化MQTT客户端
+fn init() -> (&'static config::mqtt_config::Config, MqttOptions) {
+    // 先初始化日志系统
+    config::log_config::init_logger();
+
     // 打印程序启动信息，防止log与上次运行的日志视觉粘连
-    println!();
-    println!("======================================================");
-    println!("MQTT Client Starting...");
+    log::info!("======================================================");
+    log::info!("MQTT Client Starting...");
 
-    // 读取配置
-    let config_path = parse_config_path();
-    println!("Config path: {:?}", config_path);
-
-    let config_str = read_to_string(&config_path).unwrap_or_else(|_| {
-        eprintln!("Could not find config file at {:?}", config_path);
-        exit(1);
-    });
-    let config: Config = json5::from_str(&config_str).unwrap_or_else(|_| {
-        eprintln!("Invalid configuration format in {:?}.", config_path);
-        exit(1);
-    });
+    let config = &config::mqtt_config::MQTT_CONFIG;
 
     // MQTT 连接
     let mut mqtt_opts =
@@ -89,36 +46,25 @@ fn main() {
     mqtt_opts.set_credentials(&config.mqtt.username, &config.mqtt.password);
     mqtt_opts.set_keep_alive(Duration::from_secs(30));
 
-    // -------------------------------------------------------
-    // 如果配置开启了 TLS，则加载加密传输
-    // -------------------------------------------------------
+    // TLS 配置
     if config.mqtt.use_tls {
-        println!("SSL/TLS Enabled (MQTTS)");
+        log::info!("SSL/TLS Enabled (MQTTS)");
         // 使用系统默认配置（信任系统根证书）
         mqtt_opts.set_transport(Transport::tls_with_default_config());
     } else {
-        println!("SSL/TLS Disabled (MQTT)");
+        log::info!("SSL/TLS Disabled (MQTT)");
     }
-    println!("---");
-    // -------------------------------------------------------
 
+    log::info!("======================================================");
+
+    (config, mqtt_opts)
+}
+
+fn main() {
+    let (config, mqtt_opts) = init();
     let (client, mut connection) = Client::new(mqtt_opts, 10);
-    
-    // 订阅所有主题
-    for subscription in &config.subscriptions {
-        client
-            .subscribe(&subscription.topic, QoS::AtMostOnce)
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to subscribe to topic {}: {:?}", subscription.topic, e);
-                exit(1);
-            });
-        println!("Subscribed to topic: {}", subscription.topic);
-    }
 
-    println!(
-        "Attempting to connect to {}:{}",
-        config.mqtt.host, config.mqtt.port
-    );
+    log::info!("Connecting to {}:{}", config.mqtt.host, config.mqtt.port);
 
     // 超时重试时长
     let sleep_duration = Duration::from_secs(5);
@@ -132,23 +78,35 @@ fn main() {
                     Ok(Event::Incoming(incoming)) => {
                         match incoming {
                             Incoming::ConnAck(_ack) => {
-                                println!("Connected successfully | Subscribed to {} topics", config.subscriptions.len());
+                                log::info!("Connected successfully");
+
+                                // 连接成功后，订阅所有主题
                                 for subscription in &config.subscriptions {
-                                    println!("  - {}", subscription.topic);
+                                    client
+                                        .subscribe(&subscription.topic, QoS::AtMostOnce)
+                                        .unwrap_or_else(|e| {
+                                            err_exit!(
+                                                "Failed to subscribe to topic '{}': {:?}",
+                                                subscription.topic,
+                                                e
+                                            );
+                                        });
+                                    log::info!("- Subscribed to topic: {}", subscription.topic);
                                 }
-                                println!("---");
+
+                                log::info!("");
                             }
                             Incoming::Publish(p) => {
                                 let payload = String::from_utf8_lossy(&p.payload);
                                 let msg = payload.trim();
                                 let topic = &p.topic;
-                                println!("\nReceived on topic '{}': {}", topic, msg);
+                                log::info!("[Topic: {}] {}", topic, msg);
 
                                 // 查找对应的订阅配置并执行命令
                                 for subscription in &config.subscriptions {
                                     if &subscription.topic == topic {
                                         if let Some(cmd) = subscription.commands.get(msg) {
-                                            println!("Execute: {}", cmd);
+                                            log::info!("[Execute] {}", cmd);
                                             let _ = Command::new("sh").arg("-c").arg(cmd).spawn();
                                         }
                                         break;
@@ -156,32 +114,30 @@ fn main() {
                                 }
                             }
                             Incoming::Disconnect => {
-                                eprintln!("Disconnected from MQTT broker");
+                                log::error!("Disconnected from MQTT broker");
                             }
                             _ => {
-                                // println!("Received unexpected packet: {:?}", incoming);
+                                // log::info!("Received unexpected packet: {:?}", incoming);
                             }
                         }
                     }
                     Ok(Event::Outgoing(_outgoing)) => {
                         // 处理 outgoing 事件（可选）
-                        // println!("Outgoing event: {:?}", _outgoing);
+                        // log::info!("Outgoing event: {:?}", _outgoing);
                     }
                     Err(e) => {
-                        eprintln!("Error receiving event: {:?}", e);
+                        log::error!("Event reception error: {:?}", e);
                         handler_conn_err(e);
 
-                        println!("Reconnecting in {:?}", sleep_duration);
+                        log::info!("Reconnecting in {:?}", sleep_duration);
                         std::thread::sleep(sleep_duration);
                     }
                 }
             }
 
             Err(e) => {
-                eprintln!(
-                    "Connection error:{:?}\n Reconnecting in {:?}",
-                    e, sleep_duration
-                );
+                log::error!("Connection error:{:?} ", e);
+                log::info!("Reconnecting in {:?}", sleep_duration);
                 std::thread::sleep(sleep_duration);
             }
         }
