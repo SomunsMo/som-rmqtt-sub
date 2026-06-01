@@ -54,11 +54,12 @@ pub static MQTT_CONFIG: LazyLock<Config> = LazyLock::new(|| {
 pub fn parse_config_path() -> PathBuf {
     let args: Vec<String> = env::args().collect();
 
+    // 指定配置文件的多种参数方式
+    let config_args = ["-config", "-c", "--config", "/config"];
     for i in 0..args.len() {
-        // 支持多种参数格式：-config, --config, /config
-        if (args[i] == "-config" || args[i] == "--config" || args[i] == "/config")
-            && i + 1 < args.len()
-        {
+        // 第二条件防止启动参数最后一个是“指定配置文件”的参数标识（如 xxx -c）
+        // 这个时候访问i+1会导致越界访问从而崩溃
+        if config_args.contains(&&*args[i]) && i + 1 < args.len() {
             return PathBuf::from(&args[i + 1]);
         }
     }
