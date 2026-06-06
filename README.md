@@ -48,14 +48,11 @@ vi /etc/som-rmqtt-sub/config.json5
 
 ### 启动程序
 
-确认配置无误后即可启动 MQTT 订阅端
+确认配置无误后即可启动 MQTT 订阅端（部署脚本已自动配置开机自启）
 
 ```shell
 # 启动程序
 /etc/init.d/som-rmqtt-sub start
-
-# 如需开机自启则再执行
-/etc/init.d/som-rmqtt-sub enable  
 ```
 
 ## 构建可执行文件（参考）
